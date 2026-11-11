@@ -28,9 +28,9 @@ from sklearn.metrics import accuracy_score, f1_score
 from dgl.dataloading import DataLoader, NeighborSampler
 from tqdm.auto import tqdm
 
-from .losses import LDAMLossNormalized
-from .model import GraphSAGEBlock, SetTransformerFusion
-from .splits import COMMON_MIN, COMMON_MAX, FEWER_MIN, FEWER_MAX, RARE_MIN, RARE_MAX
+from ..losses import LDAMLossNormalized
+from ..model import GraphSAGEBlock, SetTransformerFusion
+from ..splits import COMMON_MIN, COMMON_MAX, FEWER_MIN, FEWER_MAX, RARE_MIN, RARE_MAX
 
 NUM_COMMON_CLASSES = COMMON_MAX - COMMON_MIN + 1    # 175
 

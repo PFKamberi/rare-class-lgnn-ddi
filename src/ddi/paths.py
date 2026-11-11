@@ -1,27 +1,9 @@
-"""
-All file locations in one place.
-
-Every path the thesis notebooks hard-coded (``/content/drive/MyDrive/...`` on
-Colab, ``/home/ppcrniai/Documents/thesis_ch8/...`` on the 5090) is built here
-from two roots, so the notebooks never contain a literal path:
-
-    DATA_ROOT  where the inputs live   (Drive on Colab, a local folder otherwise)
-    WORK_ROOT  where outputs are written (checkpoints, caches, predictions, JSON)
-
-The notebooks call ``get_paths(DATA_ROOT, WORK_ROOT)`` with the two values set in
-their first cell. Nothing else in the package reads the environment.
-"""
-
 from dataclasses import dataclass, asdict
 import os
 
 # Google Drive id of the raw META-DDIE data zip (Drug_META_DDIE.db,
 # event_META_DDIE_5foldLabel.db). Same id in every thesis notebook.
 RAW_DATA_GDRIVE_ID = "1K-5lQI2Dy5dyp2SrY8-QoaWGm0fgyVNP"
-
-# Placeholder strings. Replace them in the first cell of each notebook.
-DATA_ROOT_PLACEHOLDER = "<DATA_ROOT: e.g. /content/drive/MyDrive on Colab>"
-WORK_ROOT_PLACEHOLDER = "<WORK_ROOT: e.g. /content/drive/MyDrive/ddi_runs on Colab>"
 
 
 @dataclass
@@ -63,17 +45,19 @@ class Paths:
 def get_paths(data_root: str, work_root: str, local_bin_dir: str = None) -> Paths:
     """Build every path from the two roots.
 
-    data_root     : folder containing the thesis inputs. On Colab this is
-                    /content/drive/MyDrive (the thesis notebooks kept everything
-                    at the top level of MyDrive).
+    data_root     : folder containing the thesis inputs (see README, "Data").
     work_root     : folder for new outputs. Keep it separate from data_root so
                     nothing written here can overwrite a thesis artefact.
-    local_bin_dir : where to extract the graph zip. On Colab use /content
-                    (local disk, fast); defaults to work_root.
+    local_bin_dir : where to extract the graph zip; defaults to work_root.
+    "~" is expanded in all three.
     """
     for r in (data_root, work_root):
         if r.startswith("<"):
             raise ValueError(f"Placeholder not replaced: {r}")
+    data_root = os.path.expanduser(data_root)
+    work_root = os.path.expanduser(work_root)
+    if local_bin_dir:
+        local_bin_dir = os.path.expanduser(local_bin_dir)
     local_bin_dir = local_bin_dir or work_root
     raw = os.path.join(data_root, "data")
     return Paths(

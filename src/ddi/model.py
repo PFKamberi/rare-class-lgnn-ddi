@@ -15,7 +15,7 @@ The only deliberate change from the warm-start and episodic notebooks is the
 message-passing layer: dgl.nn.SAGEConv(aggregator_type="mean") is replaced by
 ScatterSAGEConv, which computes the same thing in plain PyTorch. This lets DGL
 stay on the CPU (graph building and neighbour sampling only), so one code path
-runs on Colab, an A100 and the RTX 5090. Because DGL is CPU-only, sampled
+runs on any CUDA GPU (tested on the RTX 5090). Because DGL is CPU-only, sampled
 blocks are no longer moved to the GPU; forward() moves the features instead.
 tests/test_scatter_sage.py checks the layer against DGL's SAGEConv.
 """

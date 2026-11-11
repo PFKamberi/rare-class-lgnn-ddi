@@ -9,10 +9,11 @@ Every phase writes to disk and skips work that is already there, as in the
 notebook. Paths come from a ColdStartDirs object instead of module globals.
 
 KNOWN ISSUES (kept):
-  * phase0_build_parent builds node ids with list(set(...)), whose order
-    depends on Python's string-hash seed. The drug split is a permutation over
-    node ids, so a fresh rebuild gives a DIFFERENT drug split. Reproduce the
-    thesis only from the cached parent_graph.bin (graphs_v4 on the laptop).
+  * the thesis parent graph was built with list(set(...)) node ids, whose order
+    depended on Python's string-hash seed. phase0_build_parent now sorts the ids,
+    so rebuilds are deterministic, but they give a DIFFERENT drug split from the
+    thesis. Reproduce the thesis only from the cached parent_graph.bin
+    (graphs_v4 on the laptop).
   * retrieval routing (rare_node_mask) uses the true label, as in warm start.
   * train-node rows of the union index are recomputed with a different
     self-exclusion rule than at training time (see retrieval.build_union_index).
@@ -36,10 +37,11 @@ from tqdm.auto import tqdm
 import dgl
 from dgl.dataloading import DataLoader, NeighborSampler
 
-from .losses import FocalLoss, LDAMLoss, class_weights
-from .metrics import full_metrics
-from .model import GraphSAGEBlock, load_checkpoint
-from .retrieval import SimilarityPrototype, build_topk_cosine_knn, build_union_index
+from ..losses import FocalLoss, LDAMLoss, class_weights
+from ..metrics import full_metrics
+from ..model import GraphSAGEBlock, load_checkpoint
+from ..data import chunk_and_embed
+from ..retrieval import SimilarityPrototype, build_topk_cosine_knn, build_union_index
 
 # notebook constants (cell 2)
 SEED, FANOUTS, BATCH_SIZE, DROPOUT = 42, [15, 10], 1024, 0.1
@@ -204,7 +206,7 @@ def phase0_build_parent(d, drug_db, event_db, seed=SEED):
     ev["label"] = ev["label"].astype(int)
     ev = ev[ev.label <= 227]
     drugs = ldf(drug_db, "drug")
-    ids = list(set(ev["id1"]) | set(ev["id2"]))     # KNOWN ISSUE: hash-seed dependent order
+    ids = sorted(set(ev["id1"]) | set(ev["id2"]))   # deterministic: sorted DrugBank ids
     i2n = {v: i for i, v in enumerate(ids)}
     g = dgl.graph(([i2n[x] for x in ev["id1"]], [i2n[x] for x in ev["id2"]]), num_nodes=len(ids))
     g.edata["label"] = torch.tensor(ev.label.to_list(), dtype=torch.long)
@@ -213,16 +215,8 @@ def phase0_build_parent(d, drug_db, event_db, seed=SEED):
     inv = {v: k for k, v in i2n.items()}
     sm = [drugs[drugs.id == inv[i]]["smile"].values[0] for i in range(g.num_nodes())]
 
-    def emb(s, ck=256, ov=64):
-        ch = [s[i:i + ck] for i in range(0, len(s), ck - ov)] or [s]
-        outs = []
-        for c_ in ch:
-            with torch.no_grad():
-                outs.append(mdl(**tok(c_, return_tensors="pt")).last_hidden_state[:, 0, :])
-        ml = max(o.shape[1] for o in outs)
-        return torch.cat([F.pad(o, (0, ml - o.shape[1])) for o in outs], 0)[0, :].unsqueeze(0)
-
-    g.ndata["smiles_embedding"] = torch.stack([emb(s) for s in tqdm(sm, desc="ChemBERTa")], 0).squeeze(1)
+    g.ndata["smiles_embedding"] = torch.stack(
+        [chunk_and_embed(s, tok, mdl) for s in tqdm(sm, desc="ChemBERTa")], 0).squeeze(1)
     g = assign_drug_buckets(g, seed)
     dgl.save_graphs(d.parent, [g])
     print("  saved", d.parent)

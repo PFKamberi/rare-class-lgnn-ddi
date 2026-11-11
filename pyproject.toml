@@ -8,8 +8,8 @@ version = "0.1.0"
 description = "Line-graph GNN for multi-class DDI event prediction (MSc thesis code, modular port)"
 requires-python = ">=3.10,<3.13"
 # torch and dgl are NOT listed: their wheels depend on the machine
-# (CUDA version, GPU). Install them with setup/colab_setup.sh or
-# setup/setup_local.sh first, then `pip install -e .`.
+# (CUDA version, GPU). setup/setup_local.sh installs them, then this
+# package in editable mode.
 dependencies = [
     "numpy",
     "pandas>=2.0",

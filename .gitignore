@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+.ipynb_checkpoints/
+# data and outputs never go in git
+*.bin
+*.pt
+*.npz
+*.db
+*.zip
+runs/
+ddi_runs/

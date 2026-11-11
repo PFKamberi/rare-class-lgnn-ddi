@@ -28,8 +28,8 @@ import dgl
 from dgl.dataloading import DataLoader, NeighborSampler
 from sklearn.metrics import f1_score
 
-from .model import GraphSAGEBlock, load_checkpoint
-from .retrieval import build_retrieval_x_base
+from ..model import GraphSAGEBlock, load_checkpoint
+from ..retrieval import build_retrieval_x_base
 
 GROUPS = {"common (#1-#175)": (1, 175),
           "fewer (#176-#204)": (176, 204),

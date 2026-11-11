@@ -32,14 +32,14 @@ def ensure_graph_bin(graph_zip: str, graph_bin: str):
 
 def load_drug_graph(graph_bin: str):
     """Load ONLY the drug-level graph (index 0). Cheap: does not read the
-    640M-edge line graph, so it fits in standard Colab RAM."""
+    640M-edge line graph, so it needs only a few GB of RAM."""
     graphs, _ = dgl.load_graphs(graph_bin, [0])
     return graphs[0]
 
 
 def load_graph_pair(graph_bin: str):
     """Load [drug graph, line graph]. The full thesis line graph needs a
-    high-RAM machine (A100 high-RAM Colab or the 64 GB laptop)."""
+    machine with about 64 GB of RAM."""
     graphs, _ = dgl.load_graphs(graph_bin)
     subgraph, line_subgraph = graphs
     return subgraph, line_subgraph

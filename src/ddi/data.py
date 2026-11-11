@@ -1,20 +1,3 @@
-"""
-Raw data loading, ChemBERTa drug embeddings and drug-graph construction.
-
-Source: Thesis_baselline_undirected_linegraph_GraphSage.ipynb, cells 5, 7, 9, 10,
-13, 17 (the notebook that produced ddi_graph_and_linegraph.bin).
-
-Ported as-is. Behaviour that is known to be wrong is kept on purpose and
-marked KNOWN ISSUE; it is what produced the thesis graph.
-Changes from the notebook (paths/plumbing only):
-  * database paths are arguments instead of hard-coded /content/data/... paths;
-    create_ddi_graph now passes event_db_path on to get_all_events (the notebook
-    called get_all_events() with its default path, which is the same file).
-  * create_line_subgraph uses its `original_graph` argument (the notebook read a
-    global called `graph`; with num_nodes_to_sample=None, which is how the
-    thesis graph was built, both are the same object).
-"""
-
 import os
 import sqlite3
 import zipfile
@@ -24,16 +7,15 @@ import torch
 import dgl
 
 
-# ---------------------------------------------------------------------------
-# raw data download (cell 13)
-# ---------------------------------------------------------------------------
-def download_raw_data(raw_data_dir: str, gdrive_id: str):
-    """Download and extract the META-DDIE databases if they are not there."""
-    drug_db = os.path.join(raw_data_dir, "Drug_META_DDIE.db")
-    event_db = os.path.join(raw_data_dir, "event_META_DDIE_5foldLabel.db")
+def download_raw_data(drug_db: str, event_db: str, gdrive_id: str):
+    """Download and extract the META-DDIE databases if they are not there.
+    drug_db / event_db come from ddi.paths (paths.drug_db, paths.event_db);
+    both must sit in the same data/ folder, as in the zip."""
     if os.path.exists(drug_db) and os.path.exists(event_db):
-        print(f"raw data present in {raw_data_dir}")
+        print(f"raw data present: {drug_db}, {event_db}")
         return drug_db, event_db
+    raw_data_dir = os.path.dirname(drug_db)
+    assert os.path.dirname(event_db) == raw_data_dir, "both databases must be in the same folder"
     import gdown
     parent = os.path.dirname(raw_data_dir.rstrip("/")) or "."
     os.makedirs(parent, exist_ok=True)
@@ -47,9 +29,6 @@ def download_raw_data(raw_data_dir: str, gdrive_id: str):
     return drug_db, event_db
 
 
-# ---------------------------------------------------------------------------
-# database loaders (cell 5)
-# ---------------------------------------------------------------------------
 def load_data_into_dataframe(db_path: str, table_name: str) -> pd.DataFrame:
     conn = sqlite3.connect(db_path)
     query = f"SELECT * FROM {table_name}"
@@ -70,42 +49,33 @@ def get_all_events(event_db_path: str) -> pd.DataFrame:
         event_dfs.append(df)
     return pd.concat(event_dfs)
 
-
-# ---------------------------------------------------------------------------
-# ChemBERTa embeddings (cell 7)
-# ---------------------------------------------------------------------------
-def get_key_by_value(dictionary, value):
-    for key, val in dictionary.items():
-        if val == value:
-            return key
-    return None
-
-
 def get_smiles_list(graph, drugs_df, id_to_node):
+    node_to_id = {node: drug_id for drug_id, node in id_to_node.items()}
     smiles = []
     for i in range(graph.num_nodes()):
-        drug_id = get_key_by_value(id_to_node, graph.ndata['id'][i].item())
+        drug_id = node_to_id[graph.ndata['id'][i].item()]
         smiles.append(drugs_df[drugs_df.id == drug_id]['smile'].values[0])
     return smiles
 
-
 def chunk_and_embed(smiles_string, tokenizer, model, chunk_size=256, overlap=64):
-    chunks = [smiles_string[i:i + chunk_size]
-              for i in range(0, len(smiles_string), chunk_size - overlap)]
-    chunk_embeddings = []
+    """ChemBERTa embedding of one SMILES: the mean of the [CLS] vectors of
+    overlapping 256-character chunks. A SMILES of <= 256 characters is a single
+    chunk, so its embedding is unchanged from the thesis.
+
+    The thesis graph (ddi_graph_and_linegraph.bin) used only the FIRST chunk's
+    [CLS]; that affected 31 of 3,535 drugs (0.97% of interactions)."""
+    # Chunk starts 0, 192, 384, ... A new chunk starts only while the previous one
+    # has not reached the end of the string, so no chunk lies entirely inside the
+    # previous one and any SMILES of <= 256 characters is exactly one chunk.
+    step = chunk_size - overlap
+    starts = range(0, max(len(smiles_string) - overlap, 1), step)
+    chunks = [smiles_string[i:i + chunk_size] for i in starts]
+    cls = []
     for chunk in chunks:
         inputs = tokenizer(chunk, return_tensors="pt")
         with torch.no_grad():
-            outputs = model(**inputs)
-            chunk_embeddings.append(outputs.last_hidden_state[:, 0, :])  # [CLS] per chunk
-    max_len = max(ce.shape[1] for ce in chunk_embeddings)
-    padded_embeddings = [torch.nn.functional.pad(ce, (0, max_len - ce.shape[1]))
-                         for ce in chunk_embeddings]
-    final_embedding = torch.cat(padded_embeddings, dim=0)
-    # KNOWN ISSUE (kept): only the first chunk's [CLS] is used; for SMILES
-    # longer than 256 characters the remaining chunks are computed and dropped.
-    final_embedding = final_embedding[0, :].unsqueeze(0)
-    return final_embedding
+            cls.append(model(**inputs).last_hidden_state[:, 0, :])   # [1, hidden]
+    return torch.cat(cls, dim=0).mean(dim=0, keepdim=True)            # [1, hidden]
 
 
 def generate_smiles_embeddings(graph, drugs_df, id_to_node,
@@ -117,15 +87,12 @@ def generate_smiles_embeddings(graph, drugs_df, id_to_node,
     embeddings = [chunk_and_embed(smile, tokenizer, model) for smile in smiles_list]
     return embeddings
 
-
-# ---------------------------------------------------------------------------
-# drug graph (cells 9, 10)
-# ---------------------------------------------------------------------------
 def graph_construction(drugs_df, event_df):
-    # KNOWN ISSUE (kept): list(set(...)) ordering depends on Python's string
-    # hash seed, so node ids differ between Python processes. The thesis graph
-    # is reproducible only from the saved ddi_graph_and_linegraph.bin.
-    all_ids = list(set(event_df['id1'].unique()).union(set(event_df['id2'].unique())))
+    # Drugs are numbered in sorted DrugBank-id order, so every build gives the
+    # same node ids. The thesis graph (ddi_graph_and_linegraph.bin) was built
+    # with list(set(...)), whose order depended on Python's string-hash seed;
+    # reproduce thesis numbers only from that saved file.
+    all_ids = sorted(set(event_df['id1'].unique()).union(set(event_df['id2'].unique())))
     id_to_node = {id_val: idx for idx, id_val in enumerate(all_ids)}
 
     # Directed: edges only from id1 to id2.
@@ -187,10 +154,6 @@ def create_ddi_graph(drug_db_path: str, event_db_path: str, neg_sample_ratio: fl
         'id': torch.arange(start_neg_id, start_neg_id + neg_src.shape[0])})
     return graph
 
-
-# ---------------------------------------------------------------------------
-# line graph (cell 17)
-# ---------------------------------------------------------------------------
 def create_line_subgraph(original_graph, num_nodes_to_sample=None):
     """Optionally node-subsample the drug graph, then build the directed line
     graph with backtracking=False (an edge (u,v) is adjacent to (v,w), w != u)."""
