@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ddi"
+version = "0.1.0"
+description = "Line-graph GNN for multi-class DDI event prediction (MSc thesis code, modular port)"
+requires-python = ">=3.10,<3.13"
+# torch and dgl are NOT listed: their wheels depend on the machine
+# (CUDA version, GPU). Install them with setup/colab_setup.sh or
+# setup/setup_local.sh first, then `pip install -e .`.
+dependencies = [
+    "numpy",
+    "pandas>=2.0",
+    "scikit-learn>=1.3",
+    "scipy>=1.10",
+    "tqdm>=4.66",
+    "transformers==4.44.2",
+    "gdown>=4.4",
+    "psutil>=5.9",
+    "pyyaml",
+    "pydantic",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "nbformat", "nbclient", "ipykernel"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
