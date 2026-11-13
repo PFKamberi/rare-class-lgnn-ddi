@@ -17,6 +17,8 @@ def main():
     p = parser(__doc__)
     p.add_argument("--seed", type=int, default=0, help="seed for the test-subgraph drug sample")
     args = p.parse_args()
+    if args.sample:
+        raise SystemExit("--sample does not use the thesis graph: run build_sample_graph.py instead")
     paths, _, _ = setup(args)
 
     G.ensure_graph_bin(paths.graph_zip, paths.graph_bin)

@@ -20,8 +20,8 @@ def main():
     p.add_argument("--epochs", type=int, default=None, help="default: 100 (2 with --test)")
     args = p.parse_args()
     paths, device, tag = setup(args)
-    if args.thesis_checkpoint and args.test:
-        raise SystemExit("--thesis-checkpoint needs the full graph (drop --test)")
+    if args.thesis_checkpoint and (args.test or args.sample):
+        raise SystemExit("--thesis-checkpoint needs the full graph (drop --test/--sample)")
     episodes = args.episodes or (200 if args.test else 10_000)
 
     lg = load_line_graph(paths, args)

@@ -18,8 +18,8 @@ def main():
                    help="evaluate the original thesis checkpoints instead (full data only)")
     args = p.parse_args()
     paths, device, tag = setup(args)
-    if args.eval_thesis_checkpoints and args.test:
-        raise SystemExit("--eval-thesis-checkpoints needs the full graph (drop --test)")
+    if args.eval_thesis_checkpoints and (args.test or args.sample):
+        raise SystemExit("--eval-thesis-checkpoints needs the full graph (drop --test/--sample)")
 
     g, num_classes = warm_graph(paths, args, tag)
     print("classes:", num_classes)

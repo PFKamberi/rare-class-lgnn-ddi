@@ -15,8 +15,8 @@ def main():
                    help="use the thesis checkpoints and kNN cache (full data only)")
     args = p.parse_args()
     paths, device, tag = setup(args)
-    if args.thesis_checkpoints and args.test:
-        raise SystemExit("--thesis-checkpoints needs the full graph (drop --test)")
+    if args.thesis_checkpoints and (args.test or args.sample):
+        raise SystemExit("--thesis-checkpoints needs the full graph (drop --test/--sample)")
 
     g, num_classes = warm_graph(paths, args, tag)
     if args.thesis_checkpoints:

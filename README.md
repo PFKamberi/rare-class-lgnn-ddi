@@ -21,7 +21,7 @@ src/ddi/            the package
   train.py          warm-start training and the five Chapter 7 configurations
   evaluate.py       five-draw strict evaluation of checkpoints
   experiments/      diagnostics, episodic (META-DDIE protocol), cold start
-scripts/            one script per step, run in order (see "Running")
+scripts/            one script per step, run in order (see "Running"), and a demo on public data
 setup/              environment setup and GPU check
 tests/              CPU tests on synthetic graphs: pytest -q tests
 ```
@@ -36,6 +36,20 @@ python setup/verify_gpu.py       # GPU kernels + ScatterSAGEConv vs DGL's SAGECo
 
 DGL 2.1.0 comes from PyPI and is CPU-only. It is used only to build graphs and sample neighbours; the model runs on the GPU. The setup script patches DGL so it skips its graphbolt library, which this code does not use and which has no build for torch 2.7.
 
+## Quick demo on public data
+
+No thesis data is needed:
+
+```bash
+bash scripts/run_demo.sh --data-root ~/ddi_data --work-root ~/ddi_runs
+```
+
+The demo downloads the META-DDIE databases (from the authors' link, about 21 MB) and ChemBERTa-77M (from Hugging Face). It builds a class-stratified sample graph: at most 200 interactions per event type, so every common, fewer and rare type with data is represented, plus sampled non-interacting pairs as in the thesis graph. It then trains and evaluates the warm-start model (30 epochs) and runs the diagnostics. Results are in `<work root>/warmstart/table_7_8_sample.json` and `<work root>/diagnostics/`.
+
+The sample is not the thesis graph, so its numbers are not comparable with the thesis tables. The other steps run on it too: `python scripts/04_episodic.py --sample ...`, `python scripts/05_coldstart.py --sample ...`. `build_sample_graph.py --help` lists the sampling options.
+
+On the default sample, one run gave macro-F1 0.713 → 0.748 and rare-F1 0.547 → 0.730 (baseline → full model); expect similar but not identical numbers.
+
 ## Data
 
 The scripts take two folders, as `--data-root` / `--work-root` or the environment variables `DDI_DATA_ROOT` / `DDI_WORK_ROOT`:
@@ -44,7 +58,7 @@ The scripts take two folders, as `--data-root` / `--work-root` or the environmen
   - `ddi_graph_and_linegraph.zip`: the thesis graph (required).
   - `knn_cache_k5.pt`, `thesis_smart_fusion_whole_graph_checkpoints/`, `thesis_metaddie_clean_run/`: thesis kNN cache and checkpoints, needed only to re-evaluate the thesis models.
   - `thesis_ch8/graphs_v4/parent_graph.bin`: the thesis cold-start graph, needed to reproduce the thesis drug split.
-  - `data/Drug_META_DDIE.db`, `data/event_META_DDIE_5foldLabel.db`: the META-DDIE databases, needed only for a fresh cold-start rebuild (downloaded with `gdown` if missing).
+  - `data/Drug_META_DDIE.db`, `data/event_META_DDIE_5foldLabel.db`: the META-DDIE databases, needed for the demo and for a fresh cold-start rebuild (downloaded with `gdown` from the META-DDIE authors' link if missing).
 - **work root**: everything the scripts write (extracted graph, checkpoints, caches, JSON results). Keep it separate from the data root.
 
 The thesis graph cannot be regenerated: its 333,237 sampled non-interacting pairs (class 0) were drawn unseeded. Always use the saved zip. Extract it only with `01_prepare_data.py`: plain `unzip` truncates the 7.7 GB file to 3.39 GB (missing zip64 size field), and the script checks the CRC.
@@ -146,4 +160,4 @@ Table 7.9 in the thesis lists group sizes (common 216,415, fewer 176 test intera
 python -m pytest -q tests
 ```
 
-CPU only, on synthetic graphs, a few minutes. `tests/test_scripts.py` runs all five scripts end to end in test mode.
+CPU only, on synthetic graphs, a few minutes; nothing is downloaded. `tests/test_scripts.py` runs all five scripts end to end in test mode; `tests/test_sample_graph.py` builds a sample graph from tiny databases and runs the scripts on it with `--sample`.

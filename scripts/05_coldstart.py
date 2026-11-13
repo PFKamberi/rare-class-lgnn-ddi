@@ -6,7 +6,7 @@ import shutil
 
 import dgl
 
-from _common import parser, setup, test_drug_graph_path
+from _common import parser, sample_drug_graph_path, setup, test_drug_graph_path
 from ddi.experiments import coldstart as CS
 
 
@@ -15,9 +15,11 @@ def main():
     p.add_argument("--thesis-parent-graph", default=None,
                    help="the thesis graphs_v4/parent_graph.bin, to reproduce the thesis drug split "
                         "(default: <data root>/thesis_ch8/graphs_v4/parent_graph.bin if present)")
+    p.add_argument("--max-epochs", type=int, default=None, help="default: 100 (2 with --test)")
+    p.add_argument("--min-epochs", type=int, default=None, help="default: 30 (1 with --test)")
     args = p.parse_args()
     paths, device, tag = setup(args)
-    tag = tag if args.test else "v4"
+    tag = tag if (args.test or args.sample) else "v4"
     d = CS.ColdStartDirs(base=paths.coldstart_dir, tag=tag)
     thesis_parent = args.thesis_parent_graph or os.path.join(paths.thesis_ch8_dir, "graphs_v4", "parent_graph.bin")
 
@@ -28,6 +30,11 @@ def main():
         path = test_drug_graph_path(paths, args.n_test_drugs)
         if not os.path.exists(path):
             raise SystemExit(f"{path} not found: run 01_prepare_data.py --test first")
+        CS.phase0_from_drug_graph(d, dgl.load_graphs(path)[0][0])
+    elif args.sample:
+        path = sample_drug_graph_path(paths)
+        if not os.path.exists(path):
+            raise SystemExit(f"{path} not found: run build_sample_graph.py first")
         CS.phase0_from_drug_graph(d, dgl.load_graphs(path)[0][0])
     elif os.path.exists(thesis_parent):
         shutil.copy(thesis_parent, d.parent)
@@ -42,6 +49,10 @@ def main():
     CS.phase0_report(d)
 
     epochs = dict(max_epochs=2, min_epochs=1) if args.test else {}
+    if args.max_epochs is not None:
+        epochs["max_epochs"] = args.max_epochs
+    if args.min_epochs is not None:
+        epochs["min_epochs"] = args.min_epochs
     CS.banner("PHASE 1 - class filter and line graphs")
     CS.phase1(d)
     CS.mark(d, "phase1")

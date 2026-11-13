@@ -18,9 +18,12 @@ def parser(description):
                    help="folder with the thesis inputs, read only (or set DDI_DATA_ROOT)")
     p.add_argument("--work-root", default=os.environ.get("DDI_WORK_ROOT"),
                    help="folder for all outputs (or set DDI_WORK_ROOT)")
-    p.add_argument("--test", action="store_true",
-                   help="use the small test subgraph built by 01_prepare_data.py --test; "
-                        "checks that the code runs, the numbers mean nothing")
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument("--test", action="store_true",
+                      help="use the small test subgraph built by 01_prepare_data.py --test; "
+                           "checks that the code runs, the numbers mean nothing")
+    mode.add_argument("--sample", action="store_true",
+                      help="use the sample graph built by build_sample_graph.py (no thesis data needed)")
     p.add_argument("--n-test-drugs", type=int, default=800,
                    help="drugs in the test subgraph (default 800)")
     p.add_argument("--device", default=None, help="cuda or cpu (default: cuda if available)")
@@ -34,9 +37,11 @@ def setup(args):
                       os.path.abspath(os.path.expanduser(args.work_root)))
     paths.make_output_dirs()
     device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "cpu"))
-    tag = f"test{args.n_test_drugs}" if args.test else "full"
+    sample = getattr(args, "sample", False)
+    tag = f"test{args.n_test_drugs}" if args.test else ("sample" if sample else "full")
+    mode = "TEST" if args.test else ("SAMPLE" if sample else "FULL")
     print(f"data root: {paths.data_root}\nwork root: {paths.work_root}\n"
-          f"device: {device} | mode: {'TEST' if args.test else 'FULL'} | tag: {tag}")
+          f"device: {device} | mode: {mode} | tag: {tag}")
     return paths, device, tag
 
 
@@ -48,6 +53,18 @@ def test_drug_graph_path(paths, n):
     return os.path.join(paths.test_graph_dir, f"test_drug_graph_noneg_{n}.bin")
 
 
+def sample_dir(paths):
+    return os.path.join(paths.work_root, "sample")
+
+
+def sample_pair_path(paths):
+    return os.path.join(sample_dir(paths), "sample_pair.bin")
+
+
+def sample_drug_graph_path(paths):
+    return os.path.join(sample_dir(paths), "sample_drug_graph_noneg.bin")
+
+
 def load_line_graph(paths, args):
     """Thesis [drug graph, line graph] (or the test pair) with endpoint features attached."""
     from ddi import graph as G
@@ -55,6 +72,10 @@ def load_line_graph(paths, args):
         path = test_pair_path(paths, args.n_test_drugs)
         if not os.path.exists(path):
             raise SystemExit(f"{path} not found: run 01_prepare_data.py --test first")
+    elif getattr(args, "sample", False):
+        path = sample_pair_path(paths)
+        if not os.path.exists(path):
+            raise SystemExit(f"{path} not found: run build_sample_graph.py first")
     else:
         G.ensure_graph_bin(paths.graph_zip, paths.graph_bin)
         path = paths.graph_bin          # 640M line-graph edges: needs about 64 GB of RAM
