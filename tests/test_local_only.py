@@ -1,5 +1,3 @@
-"""The first release is local only: no Colab code or text anywhere, and the
-raw-database file names live only in ddi.paths."""
 import inspect
 import json
 import pathlib
