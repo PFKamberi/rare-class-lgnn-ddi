@@ -1,7 +1,4 @@
 """Step 1: extract the thesis graph and, with --test, build the small test graphs.
-
-The thesis graph cannot be regenerated (its sampled non-interacting pairs were drawn
-unseeded), so it is always taken from ddi_graph_and_linegraph.zip in the data root.
 """
 import os
 
