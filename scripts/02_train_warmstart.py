@@ -1,5 +1,5 @@
-"""Step 2: warm start (Chapter 7). Trains the five configurations and evaluates them
-with five strict draws each (Table 7.8)."""
+"""Step 2: warm start. Trains the five configurations and evaluates them
+with five strict draws each."""
 import gc
 import os
 import shutil
