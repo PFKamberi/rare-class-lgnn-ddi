@@ -1,4 +1,3 @@
-"""No metric averages over all 212 classes (class 0 included); none is reported."""
 import pathlib
 
 import numpy as np
