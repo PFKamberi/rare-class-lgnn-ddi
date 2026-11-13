@@ -1,5 +1,5 @@
-"""Step 4: episodic META-DDIE protocol (Tables 7.12 and 7.13): common-only pretraining,
-1-shot episodes, the ChemBERTa-only baseline (T3) and inference-time smoothing (T4)."""
+"""Step 4: episodic META-DDIE protocol: common-only pretraining,
+1-shot episodes, the ChemBERTa-only baseline and inference-time smoothing."""
 import gc
 import os
 
