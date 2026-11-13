@@ -1,5 +1,4 @@
-"""Step 3: warm-start diagnostics (Tables 7.9-7.11, kNN label purity).
-Needs the baseline and full-model checkpoints from 02_train_warmstart.py."""
+"""Step 3: warm-start diagnostics."""
 import os
 
 import numpy as np
