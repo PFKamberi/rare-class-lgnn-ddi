@@ -1,12 +1,3 @@
-"""
-Loading the thesis graph and building the small test subgraph.
-
-Sources:
-  * load/attach: THIS_IS_THE_ONE_I_RUN.ipynb cells 6-9 (identical code in
-    metaddie_clean_run cell 4 and rerun_hidden384 cell 2).
-  * make_test_subgraph: new, for smoke tests only. Nothing in the thesis used it.
-"""
-
 import os
 import zipfile
 
@@ -29,13 +20,13 @@ def ensure_graph_bin(graph_zip: str, graph_bin: str):
             os.replace(extracted, graph_bin)
     return graph_bin
 
-
 def load_drug_graph(graph_bin: str):
     """Load ONLY the drug-level graph (index 0). Cheap: does not read the
     640M-edge line graph, so it needs only a few GB of RAM."""
     graphs, _ = dgl.load_graphs(graph_bin, [0])
     return graphs[0]
 
+TRUNCATED_BIN_SIZE = 8_000_000_000  # .bin larger than this means a truncated gdown download
 
 def load_graph_pair(graph_bin: str):
     """Load [drug graph, line graph]. The full thesis line graph needs a
@@ -47,7 +38,7 @@ def load_graph_pair(graph_bin: str):
 
 def attach_endpoint_features(subgraph, line_subgraph):
     """Line-graph node i is drug-graph edge i: copy its endpoint embeddings
-    and its label onto the line-graph node (cell 9, verbatim)."""
+    and its label onto the line-graph node."""
     u, v = subgraph.edges()
     drug_feats = subgraph.ndata['smiles_embedding']
     line_subgraph.ndata['drug_u_emb'] = drug_feats[u]

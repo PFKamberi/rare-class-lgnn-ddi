@@ -1,19 +1,5 @@
 """
-Retrieval augmentation ("prototype smoothing" in the thesis code).
-
-Sources:
-  build_topk_cosine_knn, SimilarityPrototype, PrototypeFusion,
-  build_retrieval_x_base             THIS_IS_THE_ONE_I_RUN cells 14 and 18
-  knn_rows, build_union_index        ch8_rebuild_resumable (local) cell 22
-                                     (the fix for out-of-range lookups in Ch8)
-
-Changes from the notebook (plumbing only):
-  * build_retrieval_x_base takes `device` and `knn_cache_path` as arguments
-    (the notebook used a global `device` and cached to f"knn_cache_k{k}.pt" in
-    the working directory).
-  * a loaded cache must have one row per node of the graph; a cache built for a
-    different graph (e.g. the full graph when running on the test subgraph)
-    now raises instead of silently indexing the wrong rows.
+Retrieval augmentation (a.k.a. Rare-Class Feature-Augmentationd).
 """
 
 import os

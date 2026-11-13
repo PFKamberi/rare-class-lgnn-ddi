@@ -7,12 +7,6 @@ Two conventions appear in the thesis code:
     episodic notebooks. Never report it.
   * STRICT macro-F1 over an explicit label set (absent classes count as 0).
     Every reported number uses this.
-
-Sources:
-  compute_metrics_default, tail_head_f1_both_versions  THIS_IS_THE_ONE_I_RUN cell 16
-  strict_metrics                                       rerun_hidden384 cell 2 (`metrics`),
-                                                       Methodology cell 33 (`metrics`)
-  full_metrics                                         ch8_rebuild_resumable cell 4
 """
 
 import numpy as np
@@ -52,7 +46,6 @@ def strict_metrics(y, p, num_classes, tail, tag=""):
 
     evt     macro-F1 over the event classes 1..num_classes-1 (class 0 = sampled
             non-interacting pairs is excluded). THIS is "macro-F1" in Ch7.
-    all212  macro-F1 over 0..num_classes-1
     default sklearn default, for the record only
     rare    macro-F1 over the rare classes (tail = bool array over classes)
     rec     rare test interactions classified correctly, out of n
@@ -63,7 +56,6 @@ def strict_metrics(y, p, num_classes, tail, tag=""):
         tag=tag,
         acc=float((y == p).mean()),
         evt=float(f1_score(y, p, average="macro", labels=np.arange(1, num_classes), zero_division=0)),
-        all212=float(f1_score(y, p, average="macro", labels=np.arange(num_classes), zero_division=0)),
         default=float(f1_score(y, p, average="macro", zero_division=0)),
         rare=float(f1_score(y, p, average="macro", labels=rare_ids, zero_division=0)),
         rec=int((p[m] == y[m]).sum()),

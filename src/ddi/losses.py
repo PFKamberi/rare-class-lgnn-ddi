@@ -1,12 +1,4 @@
 """
-Losses and class weights.
-
-Sources:
-  FocalLoss, LDAMLoss, class_weights_from_train   THIS_IS_THE_ONE_I_RUN cell 16
-                                                  (same maths in ch8_rebuild cell 4)
-  LDAMLossNormalized                              metaddie_clean_run_CLAUDE cell 12
-  class_weights                                   ch8_rebuild_resumable cell 4
-
 Two LDAM variants exist in the thesis code and both are kept:
   LDAMLoss            m_c = max_m / n_c^(1/4)                  (warm start, cold start)
   LDAMLossNormalized  m_c = max_m * (n_c^-1/4 / max_c n_c^-1/4) (episodic)

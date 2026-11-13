@@ -1,23 +1,3 @@
-"""
-Warm-start training (Chapter 7).
-
-Source: THIS_IS_THE_ONE_I_RUN cells 16 and 19 (evaluate_minibatch_with_confidence,
-collect_preds_labels, train_model_transductive, run_variant). Ported as-is.
-
-Changes from the notebook (device and paths only):
-  * blocks stay on the CPU (DGL is CPU-only here); the model moves features to
-    the GPU and labels are moved with .to(device). The notebook did
-    `blocks = [b.to(device) for b in blocks]`, which needs a CUDA build of DGL.
-  * run_variant takes checkpoint_dir, knn_cache_path and device as arguments.
-
-KNOWN ISSUES (kept):
-  * hidden width = num_classes (212 on the thesis graph), set inside run_variant.
-  * early stopping and the printed "MacroF1" use sklearn's DEFAULT macro-F1.
-    Report numbers from ddi.evaluate (strict), not from these logs.
-  * tail_threshold for the logged tail F1 defaults to 20; the model routes
-    retrieval at rare_threshold=15.
-"""
-
 import os
 import math
 
@@ -109,11 +89,18 @@ def train_model_transductive(
     checkpoint_path="best_model.pt",
     checkpoint_dir=None,
     log_every=1,
-    tail_threshold=20,
+    tail_threshold=15,
     eval_train_every=1,
     resume_from=None,
     strict_resume=False,
 ):
+    """Train with minibatch neighbour sampling and early stopping on validation
+    macro-F1; returns the test metrics of the best checkpoint.
+
+    The thesis settings are passed by run_variant (LDAM loss, label smoothing
+    0.05, grad-norm clip 1.0, uniform sampler, num_workers=0). The defaults
+    below are the notebook's generic defaults; no thesis run uses them.
+    """
     device = device or next(model.parameters()).device
 
     # ---- checkpoint path ----

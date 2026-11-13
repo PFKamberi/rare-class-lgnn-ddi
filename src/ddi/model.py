@@ -2,22 +2,18 @@
 Model: symmetric endpoint fusion -> (optional) retrieval augmentation ->
 two GraphSAGE layers -> linear classifier.
 
-Sources:
-  fusion modules, GraphSAGEBlock   THIS_IS_THE_ONE_I_RUN cell 15 (warm start)
-  ConcatFusion, out-of-range guard ch8_rebuild_resumable (local) cell 4
-  forward_embed                    metaddie_clean_run_CLAUDE cell 10
-  ScatterSAGEConv                  ch8_rebuild_resumable (local) cell 4
-
 One GraphSAGEBlock serves all four experiment families. Its parameter names are
 the same as in each thesis notebook, so every thesis checkpoint loads into it.
 
 The only deliberate change from the warm-start and episodic notebooks is the
 message-passing layer: dgl.nn.SAGEConv(aggregator_type="mean") is replaced by
-ScatterSAGEConv, which computes the same thing in plain PyTorch. This lets DGL
-stay on the CPU (graph building and neighbour sampling only), so one code path
-runs on any CUDA GPU (tested on the RTX 5090). Because DGL is CPU-only, sampled
-blocks are no longer moved to the GPU; forward() moves the features instead.
-tests/test_scatter_sage.py checks the layer against DGL's SAGEConv.
+ScatterSAGEConv, the same computation in plain PyTorch (same parameter names,
+so the thesis checkpoints load; max difference 4.8e-07). The cold-start
+notebook already used this layer. Reason: the installable DGL (2.1.0, PyPI) is
+CPU-only, so DGL is used only for graph building and neighbour sampling on the
+CPU, while the model runs on the GPU. forward() moves the sampled block's edge
+lists and the features to the GPU. tests/test_pipeline.py
+(test_scatter_sage_matches_dgl) checks the layer against DGL's SAGEConv.
 """
 
 import torch
@@ -165,8 +161,6 @@ class GraphSAGEBlock(nn.Module):
         self.proto = proto_module
         self.proto_apply = proto_apply
         if rare_node_mask is not None:
-            # KNOWN ISSUE (kept, disclosed in the thesis): the mask is derived
-            # from each node's TRUE label, so routing uses label information.
             self.register_buffer("rare_node_mask", rare_node_mask.bool())
         else:
             self.rare_node_mask = None

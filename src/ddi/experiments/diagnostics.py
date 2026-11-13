@@ -1,26 +1,3 @@
-"""
-Warm-start diagnostics (Tables 7.9-7.11 and the kNN label-purity analysis).
-
-Sources (Methodolody_claims_verifications_for_chapter_5.ipynb):
-  control logits + control table  cell 6  (control_table_thr15_standalone.py) -> Table 7.10
-  frequency groups                cell 33 (ch7_fill_gaps.py, PART 2)           -> Table 7.9
-  label-dependence split          cell 14 (prototype_label_dependence_check.py) -> Table 7.11
-  kNN label purity                cell 5  (knn_label_purity.py)                -> Ch5 claim
-
-Change from the notebook: every function takes the graph with the canonical
-split from ddi.splits.filter_and_split_graph. The notebook re-typed the split
-arithmetic in each script, and one copy (cell 6) used test_size=0.30 instead of
-(1 - 0.70), which shifts one node between train and validation.
-
-Left out on purpose: the concat-vs-set fusion ablation (cells 11-12, 24), whose
-predictions came from a split overlapping training by 5,867 nodes.
-
-OPEN ISSUE: Table 7.9 in the thesis reports group sizes (common 216,415, fewer
-176) that do not match what cell 33 prints (166,570 and 39), although the fewer
-F1 values match. frequency_groups() reproduces cell 33; re-derive Table 7.9
-from its output before reusing it.
-"""
-
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -43,7 +20,7 @@ def train_counts_and_tail(g, num_classes, thr=15):
 
 
 # ---------------------------------------------------------------------------
-# control logits (cell 6, slow path)
+# control logits
 # ---------------------------------------------------------------------------
 @torch.no_grad()
 def logits_for(model, g, test_nids, seed=0, batch_size=512):
@@ -93,7 +70,7 @@ def control_table(ctrl, tail, num_classes):
     z_hint[np.nonzero(tail[yt_b])[0][:, None], np.nonzero(~tail)[0][None, :]] = -np.inf
     all_lbl = np.arange(num_classes)
     rows = []
-    print(f"{'model':<26}{'tailF1':>9}{'macroEvt':>10}{'macro212':>10}{'rare correct':>15}")
+    print(f"{'model':<26}{'tailF1':>9}{'macroEvt':>10}{'rare correct':>15}")
     for name, yt, yp in [("baseline", yt_b, z_b.argmax(1)),
                          ("+ rarity hint", yt_b, z_hint.argmax(1)),
                          ("+ prototype smoothing", yt_s, z_s.argmax(1))]:
@@ -101,13 +78,13 @@ def control_table(ctrl, tail, num_classes):
         is_rare = tail[yt]
         ok, n = int((yt[is_rare] == yp[is_rare]).sum()), int(is_rare.sum())
         rows.append(dict(model=name, tailF1=float(pc[tail].mean()), macroEvt=float(pc[1:].mean()),
-                         macro212=float(pc.mean()), rare_correct=ok, n_rare=n))
-        print(f"{name:<26}{pc[tail].mean():>9.4f}{pc[1:].mean():>10.4f}{pc.mean():>10.4f}{ok:>10}/{n}")
+                         rare_correct=ok, n_rare=n))
+        print(f"{name:<26}{pc[tail].mean():>9.4f}{pc[1:].mean():>10.4f}{ok:>10}/{n}")
     return rows
 
 
 # ---------------------------------------------------------------------------
-# frequency groups (cell 33, PART 2)
+# frequency groups 
 # ---------------------------------------------------------------------------
 def frequency_groups(ctrl, num_classes):
     y = ctrl["y_true"]
@@ -127,7 +104,7 @@ def frequency_groups(ctrl, num_classes):
 
 
 # ---------------------------------------------------------------------------
-# label dependence (cell 14, sections 2-4)
+# label dependence
 # ---------------------------------------------------------------------------
 def true_class_rank(z, y):
     z_true = z[np.arange(len(y)), y][:, None]
@@ -209,7 +186,7 @@ def label_dependence(ctrl, g, knn_idx, knn_sim, train_counts, thresholds=(15, 20
 
 
 # ---------------------------------------------------------------------------
-# kNN label purity (cell 5)
+# kNN label purity 
 # ---------------------------------------------------------------------------
 def knn_purity(g, knn_idx, knn_sim, tau=0.07):
     labels_f = g.ndata["label"]

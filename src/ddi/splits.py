@@ -1,25 +1,9 @@
-"""
-Splits.
-
-  filter_and_split_graph   warm-start split (Ch7). Source: THIS_IS_THE_ONE_I_RUN
-                           cell 12, verbatim. This is the split every Ch7 number
-                           is reported on ("the correct split" in rerun_hidden384).
-  build_metaddie_graph     episodic split (Table 7.12-7.13). Source:
-                           metaddie_clean_run_CLAUDE cell 6, wrapped in a function.
-  save_split / load_split  new: write the split indices once and reuse them.
-
-Cold-start splits live in ddi.coldstart, next to the code that uses them.
-"""
-
 import numpy as np
 import torch
 import dgl
 from sklearn.model_selection import train_test_split
 
 
-# ---------------------------------------------------------------------------
-# warm start
-# ---------------------------------------------------------------------------
 def filter_and_split_graph(
     line_subgraph,
     label_key='label',
@@ -118,9 +102,6 @@ def filter_and_split_graph(
     return g_filt
 
 
-# ---------------------------------------------------------------------------
-# episodic (META-DDIE protocol)
-# ---------------------------------------------------------------------------
 MIN_CLASS_SAMPLES_EPISODIC = 2
 COMMON_MIN, COMMON_MAX = 1, 175
 FEWER_MIN, FEWER_MAX = 176, 204
@@ -195,9 +176,6 @@ def build_metaddie_graph(line_graph, seed=42, min_class_samples=MIN_CLASS_SAMPLE
     return g
 
 
-# ---------------------------------------------------------------------------
-# persist splits
-# ---------------------------------------------------------------------------
 def split_info(g, **extra):
     info = {k: g.ndata[f"{k}_mask"].nonzero(as_tuple=False).squeeze(1).cpu()
             for k in ("train", "val", "test")}

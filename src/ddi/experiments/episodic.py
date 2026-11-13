@@ -1,23 +1,5 @@
-"""
-Episodic META-DDIE-protocol evaluation (Tables 7.12 and 7.13).
-
-Source: metaddie_clean_run_CLAUDE.ipynb cells 12 (training), 17 (episodes),
-19 (T3 ChemBERTa-only baseline), 22 (T4 inference-time smoothing).
-
-Changes from the notebook (device only): the notebook moved the whole graph to
-the GPU (g.to(device)) and sampled there, which needs CUDA DGL. Here the graph
-and sampling stay on the CPU and the model moves features; embeddings Z are
-still stored on the GPU.
-
-KNOWN ISSUES (kept):
-  * episode seeds use hash(split_name) % 7. Python randomises string hashes per
-    process (PYTHONHASHSEED), so episode draws differ between sessions even
-    with SEED fixed. Set PYTHONHASHSEED before starting Python to pin them.
-  * hidden width = in_feats (384) here, unlike warm start (212).
-  * early stopping uses sklearn-default macro-F1 on the common validation set.
-"""
-
 import random
+import zlib
 from collections import defaultdict
 
 import numpy as np
@@ -52,6 +34,12 @@ def set_seed(seed):
     torch.backends.cudnn.deterministic = True
 
 
+def _salt(s):
+    """Stable replacement for the notebook's hash(s) % 7 (Python's str hash
+    changes per process)."""
+    return zlib.crc32(s.encode("utf-8")) % 7
+
+
 def _remap_common(y):
     """Common labels 1..175 -> classifier indices 0..174."""
     return y - COMMON_MIN
@@ -78,7 +66,8 @@ def evaluate(model, loader, device):
     yt = np.concatenate(yt)
     yp = np.concatenate(yp)
     return {"acc": float(accuracy_score(yt, yp)),
-            "macro_f1": float(f1_score(yt, yp, average="macro", zero_division=0))}
+            "macro_f1": float(f1_score(yt, yp, average="macro",
+                                       labels=np.arange(NUM_COMMON_CLASSES), zero_division=0))}
 
 
 def train_common_only(g, device, checkpoint_path, epochs=100, batch_size=512, fanouts=(15, 10),
@@ -103,6 +92,10 @@ def train_common_only(g, device, checkpoint_path, epochs=100, batch_size=512, fa
     val_loader = DataLoader(g, val_nids, sampler, batch_size=batch_size, shuffle=False, num_workers=0)
 
     print(f"Train={len(train_nids)}, Val={len(val_nids)}, classes={NUM_COMMON_CLASSES}")
+    n_val_cls = int(torch.unique(g.ndata['label'][val_nids]).numel())
+    print(f"common classes present in validation: {n_val_cls}/{NUM_COMMON_CLASSES}"
+          + ("" if n_val_cls == NUM_COMMON_CLASSES else
+             "  (strict macro-F1 differs from the notebook's default macro-F1)"))
     print(f"Monitor: val_{monitor}, patience={patience}, epochs={epochs}")
 
     best_score, best_epoch, no_improve = -float("inf"), 0, 0
@@ -158,7 +151,7 @@ def load_pretrained(g, checkpoint_path, device):
 
 
 # ---------------------------------------------------------------------------
-# episodes (cell 17)
+# episodes
 # ---------------------------------------------------------------------------
 @torch.no_grad()
 def compute_all_embeddings(model, g, device, fanouts=(10, 10), batch_size=2048):
@@ -269,7 +262,8 @@ def make_pools(g, device):
 
 def run_episodic_suite(Z, labels_all_dev, pools, episodes, seed, ways=(5, 10), seed_salt=""):
     """All (pool, N) combinations; skips pools with too few eligible classes.
-    seed_salt reproduces the notebook's seed formula for T3/T4 (hash(split + mode))."""
+    seed_salt is part of the notebook's seed formula for T3/T4 (split + mode),
+        hashed with the stable _salt()."""
     results = {}
     for split_name, pool in pools.items():
         for N_way in ways:
@@ -280,10 +274,10 @@ def run_episodic_suite(Z, labels_all_dev, pools, episodes, seed, ways=(5, 10), s
                 continue
             proto = run_prototype_episodes(
                 Z, labels_all_dev, pool, N=N_way, Q=1, episodes=episodes,
-                seed=seed + 1000 * N_way + hash(split_name + seed_salt) % 7)
+                seed=seed + 1000 * N_way + _salt(split_name + seed_salt))
             lin = run_linhead_episodes(
                 Z, labels_all_dev, pool, N=N_way, Q=1, episodes=episodes,
-                seed=seed + 2000 * N_way + hash(split_name + seed_salt) % 7)
+                seed=seed + 2000 * N_way + _salt(split_name + seed_salt))
             results[(split_name, N_way, "prototype")] = proto
             results[(split_name, N_way, "linear_head")] = lin
             print(f"{split_name:6s} N={N_way:<2d} | proto acc={proto['acc']:.4f} f1={proto['macro_f1']:.4f}"
@@ -292,7 +286,7 @@ def run_episodic_suite(Z, labels_all_dev, pools, episodes, seed, ways=(5, 10), s
 
 
 # ---------------------------------------------------------------------------
-# T3: ChemBERTa-only baseline (cell 19)
+# T3: ChemBERTa-only baseline
 # ---------------------------------------------------------------------------
 @torch.no_grad()
 def build_chemberta_only_embeddings(g, device, fusion_mode="mean", seed=42):
@@ -320,7 +314,7 @@ def build_chemberta_only_embeddings(g, device, fusion_mode="mean", seed=42):
 
 
 # ---------------------------------------------------------------------------
-# T4: inference-time smoothing of the frozen embeddings (cell 22)
+# T4: inference-time smoothing of the frozen embeddings
 # ---------------------------------------------------------------------------
 @torch.no_grad()
 def build_knn_to_train(Z, train_nids, k=5, chunk=8192):

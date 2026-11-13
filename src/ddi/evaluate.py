@@ -1,14 +1,3 @@
-"""
-Warm-start reporting evaluation (Table 7.8).
-
-Source: rerun_hidden384.ipynb cell 2 (ch7_rerun_FINAL.py: strict metrics on
-the canonical split) and cell 5 (five evaluation draws per checkpoint, mean and
-population sd). Those are the numbers in Table 7.8.
-
-Every draw re-samples neighbours ([15, 10], batch 1024, unseeded, as in the
-thesis), so draws differ; the spread is the sampling noise reported as +/- sd.
-"""
-
 import os
 import json
 

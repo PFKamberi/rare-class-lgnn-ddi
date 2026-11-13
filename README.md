@@ -2,105 +2,148 @@
 
 Code for the MSc thesis *Rare-Class Feature-Augmented Line-Graph Neural Networks for Drug-Drug Interaction Event Prediction under Class Imbalance* (Petros Kamberi, University of the Peloponnese & NCSR "Demokritos").
 
-The repository is a modular port of the thesis notebooks that produced the thesis results. The implementations live in `src/ddi/`; the notebooks in `notebooks/` only load data, call the package and print tables. Version 0.1.0 reproduces the thesis code as it was, known issues included (listed below), so that the thesis numbers can be regenerated before anything is changed.
+Drug-drug interaction (DDI) event prediction is cast as node classification on the line graph of the DrugBank/META-DDIE interaction graph: every interaction is a node, labelled with one of the event types. The model fuses the frozen ChemBERTa-77M embeddings of the two drugs, applies two GraphSAGE layers and an LDAM loss, and adds retrieval augmentation for rare classes.
 
-## Layout
+This repository reproduces the thesis experiments with the thesis code, ported into a package and command-line scripts. It runs locally on one CUDA GPU (developed on an RTX 5090).
+
+## Contents
 
 ```
-src/ddi/
-  paths.py        every file location, built from DATA_ROOT and WORK_ROOT
-  data.py         META-DDIE databases, ChemBERTa embeddings, drug graph, negative sampling
-  graph.py        load the thesis .bin, attach endpoint features, test subgraph
-  splits.py       warm-start split, episodic (META-DDIE) split, save/check split files
-  model.py        ScatterSAGEConv, endpoint fusion modules, GraphSAGEBlock, checkpoint loading
-  retrieval.py    kNN index, similarity prototype, prototype fusion, union index (Ch8 fix)
-  losses.py       LDAM (two variants), focal loss, class weights
-  metrics.py      strict (reporting) and sklearn-default (logging only) metrics
-  train.py        warm-start training loop and the five Chapter 7 configurations
-  evaluate.py     five-draw strict evaluation of checkpoints (Table 7.8)
-  experiments/    the thesis experiments, built on the modules above
-    diagnostics.py  control table, frequency groups, label dependence, kNN purity
-    episodic.py     common-only pretraining, 1-shot episodes, ChemBERTa-only, smoothing
-    coldstart.py    drug-disjoint split, Setup A/B graphs, E1/E2 runs, ChemBERTa floor, index fix
-notebooks/
-  checks/          one-off verification notebooks (local_only.ipynb, ...)
-  00_setup_and_test_subgraph.ipynb
-  01_warmstart_retrieval.ipynb
-  02_warmstart_diagnostics.ipynb
-  03_episodic_metaddie.ipynb
-  04_coldstart.ipynb
-setup/
-  setup_local.sh   uv venv, torch 2.7+cu128 + DGL 2.1 + this package (RTX 5090)
-  verify_gpu.py    GPU kernel check + ScatterSAGEConv vs dgl SAGEConv check
-tests/             CPU smoke tests on a synthetic graph (pytest -q tests)
+src/ddi/            the package
+  paths.py          every file location, built from a data root and a work root
+  data.py           META-DDIE databases, ChemBERTa embeddings, drug graph
+  graph.py          load the thesis graph, attach endpoint features, test subgraph
+  splits.py         warm-start split, episodic (META-DDIE) split, save/check split files
+  model.py          ScatterSAGEConv, endpoint fusion, GraphSAGEBlock, checkpoint loading
+  retrieval.py      kNN index, similarity prototype, prototype fusion, union index
+  losses.py         LDAM (two variants), focal loss, class weights
+  metrics.py        strict metrics (reported) and sklearn-default metrics (logs only)
+  train.py          warm-start training and the five Chapter 7 configurations
+  evaluate.py       five-draw strict evaluation of checkpoints
+  experiments/      diagnostics, episodic (META-DDIE protocol), cold start
+scripts/            one script per step, run in order (see "Running")
+setup/              environment setup and GPU check
+tests/              CPU tests on synthetic graphs: pytest -q tests
 ```
 
-## What reproduces what
+## Installation
 
-| Thesis | Notebook | Module | Original notebook |
-|---|---|---|---|
-| Ch4 graph (`ddi_graph_and_linegraph.bin`) | – (uses the saved file) | `data.py`, `graph.py` | `Thesis_baselline_undirected_linegraph_GraphSage` |
-| Table 7.7 (full-graph row), 7.8 | 01 | `train.py`, `evaluate.py` | `..._THIS_IS_THE_ONE_I_RUN`, `rerun_hidden384` |
-| Tables 7.9, 7.10, 7.11, kNN purity | 02 | `experiments/diagnostics.py` | `Methodolody_claims_verifications_for_chapter_5` |
-| Tables 7.12, 7.13 | 03 | `experiments/episodic.py` | `metaddie_clean_run_CLAUDE` |
-| Tables 8.1–8.7 | 04 | `experiments/coldstart.py` | `ch8_rebuild_resumable` (local, 5090) |
-| Tables 7.1–7.6 (design phase, subset graph) | not ported | – | numbers only in Thesis Update 3 |
+```bash
+bash setup/setup_local.sh        # uv venv (Python 3.11), torch 2.7.0+cu128, DGL 2.1.0, this package
+source .venv/bin/activate
+python setup/verify_gpu.py       # GPU kernels + ScatterSAGEConv vs DGL's SAGEConv
+```
+
+DGL 2.1.0 comes from PyPI and is CPU-only. It is used only to build graphs and sample neighbours; the model runs on the GPU. The setup script patches DGL so it skips its graphbolt library, which this code does not use and which has no build for torch 2.7.
 
 ## Data
 
-Set two paths in the first cell of every notebook (`~` is allowed):
+The scripts take two folders, as `--data-root` / `--work-root` or the environment variables `DDI_DATA_ROOT` / `DDI_WORK_ROOT`:
 
-- `DATA_ROOT`: the folder with the thesis inputs (read only). It holds `ddi_graph_and_linegraph.zip`, `data/` with the two META-DDIE databases (`Drug_META_DDIE.db`, `event_META_DDIE_5foldLabel.db`), `knn_cache_k5.pt`, `thesis_smart_fusion_whole_graph_checkpoints/`, `thesis_metaddie_clean_run/`, and optionally `thesis_ch8/graphs_v4/parent_graph.bin`. If `data/` is missing, notebook 04 downloads it from Google Drive with `gdown` (needed only for a fresh cold-start rebuild).
-- `WORK_ROOT`: where everything new is written. Keep it separate from `DATA_ROOT`; nothing here writes into a thesis folder.
+- **data root** (read only): the thesis inputs.
+  - `ddi_graph_and_linegraph.zip`: the thesis graph (required).
+  - `knn_cache_k5.pt`, `thesis_smart_fusion_whole_graph_checkpoints/`, `thesis_metaddie_clean_run/`: thesis kNN cache and checkpoints, needed only to re-evaluate the thesis models.
+  - `thesis_ch8/graphs_v4/parent_graph.bin`: the thesis cold-start graph, needed to reproduce the thesis drug split.
+  - `data/Drug_META_DDIE.db`, `data/event_META_DDIE_5foldLabel.db`: the META-DDIE databases, needed only for a fresh cold-start rebuild (downloaded with `gdown` if missing).
+- **work root**: everything the scripts write (extracted graph, checkpoints, caches, JSON results). Keep it separate from the data root.
 
-The thesis graph must come from the saved `ddi_graph_and_linegraph.zip`. It cannot be regenerated: the 333,237 sampled non-interacting pairs were drawn unseeded, and its node order depended on Python's string-hash seed (new builds sort the drug ids).
+The thesis graph cannot be regenerated: its 333,237 sampled non-interacting pairs (class 0) were drawn unseeded. Always use the saved zip. Extract it only with `01_prepare_data.py`: plain `unzip` truncates the 7.7 GB file to 3.39 GB (missing zip64 size field), and the script checks the CRC.
 
-## Running locally (RTX 5090, uv)
-
-Installs torch 2.7.0+cu128 and DGL 2.1.0 from PyPI, then patches DGL so it skips graphbolt (its C++ library exists only for torch 2.0–2.2; this repo never uses it). Same setup as the Chapter 8 run. `data.dgl.ai` is not needed.
+## Running
 
 ```bash
-bash setup/setup_local.sh
-source .venv/bin/activate
-python setup/verify_gpu.py
-jupyter lab            # kernel "ddi (5090)"
+export DDI_DATA_ROOT=~/ddi_data DDI_WORK_ROOT=~/ddi_runs
+
+# 1. quick check that everything runs (800-drug test subgraph, minutes; numbers mean nothing)
+bash scripts/run_all.sh --test
+
+# 2. full experiments (about 64 GB of RAM for the full line graph; hours per step)
+bash scripts/run_all.sh
 ```
 
-Run `notebooks/checks/local_only.ipynb` once to check the setup, then `00_setup_and_test_subgraph.ipynb`, then any of 01–04 with `TEST_MODE = True`.
+Or run the steps one by one (each takes `--help`). The scripts replace the thesis notebooks, which are not part of this repository.
 
-Notebook 00 reads only the drug graph from the .bin (3,342 drugs, not the 640M-edge line graph), takes `N_TEST_DRUGS` random drugs (default 800) and every pair among them, and builds the directed line graph with the thesis rule. At 800 drugs this is roughly 80k interactions and about 9M line-graph edges (expected value); raise `N_TEST_DRUGS` for a heavier test. Most rare classes vanish at this size, so the test-mode numbers say nothing about the method; test mode only checks that the code runs end to end.
+| Step | Script | Thesis output | Main options |
+|---|---|---|---|
+| 1 | `01_prepare_data.py` | extracts the thesis graph; `--test` also builds the test subgraphs | `--n-test-drugs` |
+| 2 | `02_train_warmstart.py` | Table 7.8 (and the full-graph row of 7.7) | `--skip-train`, `--eval-thesis-checkpoints`, `--epochs` |
+| 3 | `03_diagnostics.py` | Tables 7.9, 7.10, 7.11, kNN label purity | `--thesis-checkpoints` |
+| 4 | `04_episodic.py` | Tables 7.12, 7.13 | `--thesis-checkpoint`, `--episodes`, `--epochs` |
+| 5 | `05_coldstart.py` | Tables 8.1–8.7 | `--thesis-parent-graph` |
 
-`TEST_MODE = False` uses the full graph and needs about 64 GB of RAM.
+Step 3 needs the checkpoints of step 2. Step 5 reuses everything already on disk, so it can be restarted after an interruption. Results are written as JSON under the work root (`warmstart/`, `diagnostics/`, `episodic/`, `coldstart/`).
 
-## Changes from the thesis notebooks
+**Reference numbers (thesis).** Expect agreement within sampling noise, not bit for bit (see "Changes", items 2 and 9).
 
-Only plumbing was changed:
+| Output | Thesis |
+|---|---|
+| Table 7.8, full model (concat, k=5) | macro-F1 0.814 ± 0.004, rare-F1 0.705 |
+| Table 7.8, baseline | macro-F1 0.729, rare-F1 0.369 |
+| Table 7.12, 5-way | 0.833 / 0.923 / 0.837 |
+| Table 7.12, 10-way | 0.765 / 0.881 / 0.774 |
+| Table 8.3, E1.3 (Setup A/B, CS1 then CS2) | 0.251 / 0.334 / 0.055 / 0.079 |
 
-1. **Message passing.** `dgl.nn.SAGEConv(aggregator_type="mean")` is replaced everywhere by `ScatterSAGEConv` (plain PyTorch, same maths, same parameter names, so thesis checkpoints load directly). The Chapter 8 run already used it. `tests/` and `setup/verify_gpu.py` check it against DGL (max difference about 5e-7).
-2. **Device handling.** DGL runs on the CPU only (graph building and neighbour sampling). Blocks stay on the CPU and the model moves features to the GPU. The thesis warm-start and episodic notebooks moved blocks, or the whole graph, to the GPU, so neighbour-sampling random streams differ and numbers match the thesis within sampling noise, not bit for bit.
-3. **Paths** are arguments built in `paths.py`. kNN caches are given explicit paths, and a cache built for a different graph raises an error instead of being indexed silently.
-4. **Diagnostics** all use the canonical split from `splits.filter_and_split_graph`. One thesis script retyped it with `test_size=0.30` instead of `1 - 0.70`, which moves one node between train and validation.
-5. **Table 7.8** evaluates the baseline with five draws like the other rows (the thesis used a single draw for that row).
-6. **Cold start**: the retrieval-index fix for E1.4/E2.4 (the rows the thesis reports) is part of the pipeline, not a separate script.
-7. Two plain bugs that did not affect the thesis run were corrected: `create_ddi_graph` now passes `event_db_path` on, and `create_line_subgraph` uses its argument instead of a global.
-8. Two fixes that only affect graphs rebuilt from the databases, never the saved thesis files (which are what reproduce the thesis): drug node ids follow sorted DrugBank-id order instead of an order that depended on Python's string-hash seed, and SMILES longer than 256 characters are embedded as the mean [CLS] of overlapping chunks instead of the first chunk only (31 of 3,535 drugs). A fresh cold-start Phase 0 therefore gives a different drug split from the thesis; notebook 04 copies the thesis parent_graph.bin.
+**Metrics.** Macro-F1 is always strict: over the event classes 1..211 in warm start (class 0, the sampled non-interacting pairs, is excluded), and over all remapped classes in cold start. Rare = fewer than 15 training examples. Training logs print sklearn's default macro-F1 and are not reported.
+
+## Where each module comes from
+
+| Module | Thesis notebook (cells) |
+|---|---|
+| `data.py` | `Thesis_baselline_undirected_linegraph_GraphSage` 5, 7, 9, 10, 13, 17 (built `ddi_graph_and_linegraph.bin`) |
+| `graph.py` | `THIS_IS_THE_ONE_I_RUN` 6–9 (same code in `metaddie_clean_run` 4, `rerun_hidden384` 2); `make_test_subgraph` is new, for tests |
+| `splits.py` | warm start: `THIS_IS_THE_ONE_I_RUN` 12; episodic: `metaddie_clean_run_CLAUDE` 6 |
+| `metrics.py` | `THIS_IS_THE_ONE_I_RUN` 16; strict metrics: `rerun_hidden384` 2 and `Methodolody_claims_verifications_for_chapter_5` 33; `full_metrics`: `ch8_rebuild_resumable` 4 |
+| `losses.py` | `THIS_IS_THE_ONE_I_RUN` 16; `LDAMLossNormalized`: `metaddie_clean_run_CLAUDE` 12; `class_weights`: `ch8_rebuild_resumable` 4 |
+| `retrieval.py` | `THIS_IS_THE_ONE_I_RUN` 14, 18; union index: `ch8_rebuild_resumable` 22 |
+| `model.py` | `THIS_IS_THE_ONE_I_RUN` 15; `ConcatFusion`, out-of-range guard, `ScatterSAGEConv`: `ch8_rebuild_resumable` 4; `forward_embed`: `metaddie_clean_run_CLAUDE` 10 |
+| `train.py` | `THIS_IS_THE_ONE_I_RUN` 16, 19 |
+| `evaluate.py` | `rerun_hidden384` 2, 5 |
+| `experiments/diagnostics.py` | `Methodolody_claims_verifications_for_chapter_5` 5, 6, 14, 33 |
+| `experiments/episodic.py` | `metaddie_clean_run_CLAUDE` 12, 17, 19, 22 |
+| `experiments/coldstart.py` | `ch8_rebuild_resumable` (local, RTX 5090) 2–24 |
+
+Notebook names are spelled as the original files. Tables 7.1–7.6 (design phase, subset graph) are not ported.
+
+## Changes from the thesis code
+
+None of these changes the method.
+
+1. **Message passing.** `dgl.nn.SAGEConv(aggregator_type="mean")` is replaced by `ScatterSAGEConv`: the same computation in plain PyTorch, with the same parameter names, so the thesis checkpoints load unchanged. The cold-start code already used it. A test checks it against DGL (max difference about 5e-7).
+2. **Device.** DGL runs on the CPU (graph building and neighbour sampling); the model runs on the GPU. The thesis warm-start and episodic notebooks sampled on the GPU, so the sampling random streams differ.
+3. **Paths and caches.** All locations come from `paths.py`. A kNN cache built for a different graph raises an error instead of being used.
+4. **One canonical split.** All warm-start analyses use `splits.filter_and_split_graph`. One thesis script retyped it with `test_size=0.30` instead of `1 - 0.70`, which moves one node between train and validation.
+5. **Table 7.8** evaluates the baseline with five draws, like the other rows (the thesis used one draw for that row).
+6. **Cold start.** The retrieval-index fix for E1.4/E2.4 (the rows the thesis reports) is part of the pipeline.
+7. **Bugs that did not affect the thesis run:** `create_ddi_graph` passes `event_db_path` on; `create_line_subgraph` uses its argument instead of a global.
+8. **Rebuilds from the databases** (never the saved thesis files): drugs are numbered in sorted DrugBank-id order instead of a hash-seed-dependent order, and SMILES longer than 256 characters are embedded as the mean [CLS] of overlapping chunks instead of the first chunk only (31 of 3,535 drugs). A fresh cold-start rebuild therefore gives a different drug split from the thesis; `05_coldstart.py` copies the thesis parent graph when it is present.
+9. **Episodic seeds** use a stable hash (`zlib.crc32`) instead of Python's per-process `hash()`, so reruns draw the same episodes. The thesis draws cannot be redrawn, so Tables 7.12–7.13 match within episode noise. Episodic early stopping uses strict validation macro-F1; all 175 common classes are in validation, so it selects the same checkpoint as the thesis.
+10. **Logs and unused metrics.** The logged tail F1 uses threshold 15 (thesis: 20). Two unreported metrics that averaged over all 212 classes including class 0 were removed. No reported number changes.
 
 ## Known issues kept on purpose
 
-These produced the thesis numbers and are left as they were. Each is marked `KNOWN ISSUE` in the code.
+These produced the thesis numbers and are left as they were.
 
 - The line graph is **directed** (`backtracking=False`): it keeps only head-to-tail adjacency, 39% of co-incident pairs.
-- Negative sampling checks only the stored orientation and does not de-duplicate (class 0 only, excluded from all metrics).
+- The thesis graph contains 333,237 sampled non-interacting pairs (class 0): drawn unseeded, checked against one orientation only, not de-duplicated. They are a training class in warm start and excluded from every metric.
 - Warm-start hidden width = number of classes (212). A 384-wide rerun reached 0.829 ± 0.004 macro-F1 against 0.814.
-- Retrieval is routed by `rare_node_mask`, which is derived from each node's **true** label.
-- The self-exclusion rule in the kNN index replaces a self-match with the k-th neighbour, so that neighbour is counted twice.
-- Training logs and early stopping use sklearn's default macro-F1. Reported numbers use the strict convention (`evaluate.py`, `metrics.strict_metrics`, `metrics.full_metrics`).
+- Retrieval is routed by `rare_node_mask`, which is derived from each node's **true** label (warm start and cold start).
+- The kNN index replaces a training node's self-match with its k-th neighbour, so that neighbour is counted twice. The cold-start union index recomputes training rows with a different rule (top k+1, drop rank 0).
+- Warm-start early stopping uses sklearn's default macro-F1 (reported numbers are strict).
 - Two LDAM variants: unnormalised margins (warm start, cold start) and normalised margins (episodic).
-- Episode seeds use `hash(split_name) % 7` and change between Python processes unless `PYTHONHASHSEED` is set.
-- The thesis graph files number drugs in an order that depended on Python's string-hash seed. New builds number drugs in sorted DrugBank-id order and are deterministic, but a fresh cold-start Phase 0 therefore gives a different drug split from the thesis; notebook 04 can copy the thesis `parent_graph.bin`.
-- In the cold-start index fix, training rows are recomputed with a top-(k+1)-drop-self rule instead of the training-time rule.
-- The thesis graph files embed long SMILES (> 256 characters; 31 of 3,535 drugs, 0.97% of interactions) from their first 256-character chunk only. Graphs built with this code use the mean over all chunks (`ddi.data.chunk_and_embed`); shorter SMILES are unaffected.
+- The thesis graph files use the old hash-seed node order and first-chunk SMILES embeddings (see "Changes", item 8).
+
+## Terminology
+
+The code keeps the thesis-code names: "prototype" / `proto_*` (e.g. `SimilarityPrototype`, `PrototypeFusion`, `proto_k`) is the retrieval augmentation described in the thesis, the softmax-weighted mean of the k nearest training interactions fused into the rare nodes' features. The names are kept because the thesis checkpoints store parameters under them (`proto_fuse.*`).
 
 ## Open issue
 
-Table 7.9 in the thesis lists group sizes (common 216,415, fewer 176 test interactions) that do not match the script it was traced to (166,570 and 39), although the fewer-group F1 values match. Notebook 02 prints the group table; re-derive Table 7.9 from it before reusing it.
+Table 7.9 in the thesis lists group sizes (common 216,415, fewer 176 test interactions) that this code does not reproduce. On the canonical split the warm-start test set has 166,570 common and 39 fewer interactions and no rare-group interactions (classes 203–211 are dropped from validation and test as too rare); the F1 values match. Use these sizes when reusing the table.
+
+## Tests
+
+```bash
+python -m pytest -q tests
+```
+
+CPU only, on synthetic graphs, a few minutes. `tests/test_scripts.py` runs all five scripts end to end in test mode.

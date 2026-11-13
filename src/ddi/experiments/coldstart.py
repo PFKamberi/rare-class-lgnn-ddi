@@ -110,10 +110,6 @@ def mark(d, key, val=True):
     m[key] = val
     json.dump(m, open(d.manifest, "w"), indent=2)
 
-
-# ---------------------------------------------------------------------------
-# graph io (cell 6)
-# ---------------------------------------------------------------------------
 def build_lg(parent, eids):
     sub = dgl.edge_subgraph(parent, eids, relabel_nodes=True, store_ids=True)
     lg = dgl.line_graph(sub, backtracking=False, shared=False)
@@ -162,7 +158,7 @@ def graph_exists(d, name):
 
 
 # ---------------------------------------------------------------------------
-# phase 0: parent graph and drug-disjoint split (cell 8)
+# phase 0: parent graph and drug-disjoint split
 # ---------------------------------------------------------------------------
 def assign_drug_buckets(g, seed=SEED):
     """70/15/15 drug split; edge buckets 0=train-train, 1=val-val,
@@ -248,7 +244,7 @@ def phase0_report(d):
 
 
 # ---------------------------------------------------------------------------
-# phase 1: class filter and line graphs (cell 10)
+# phase 1: class filter and line graphs
 # ---------------------------------------------------------------------------
 JOBS = [("train", None, None), ("val", None, None),
         ("S2_setupA", "S2", True), ("S2_setupB", "S2", False),
@@ -320,7 +316,7 @@ def phase1(d, filter_rule=FILTER_RULE):
 
 
 # ---------------------------------------------------------------------------
-# training (cell 12)
+# training
 # ---------------------------------------------------------------------------
 @torch.no_grad()
 def collect_preds(model, loader):
@@ -449,7 +445,7 @@ def _new_opt(model, max_epochs):
 
 
 # ---------------------------------------------------------------------------
-# phase 2: cold-start runs (cell 14)
+# phase 2: cold-start runs
 # ---------------------------------------------------------------------------
 def phase2(d, device, runs=E1_RUNS, max_epochs=MAX_EPOCHS, min_epochs=MIN_EPOCHS):
     RP = os.path.join(d.out, "results_phase2.json")
@@ -489,7 +485,7 @@ def phase2(d, device, runs=E1_RUNS, max_epochs=MAX_EPOCHS, min_epochs=MIN_EPOCHS
 
 
 # ---------------------------------------------------------------------------
-# phase 3: warm-start control inside the training bucket (cell 16)
+# phase 3: warm-start control inside the training bucket
 # ---------------------------------------------------------------------------
 def phase3(d, device, runs=E2_RUNS, max_epochs=MAX_EPOCHS, min_epochs=MIN_EPOCHS):
     meta = pickle.load(open(d.meta, "rb"))
@@ -559,7 +555,7 @@ def phase3(d, device, runs=E2_RUNS, max_epochs=MAX_EPOCHS, min_epochs=MIN_EPOCHS
 
 
 # ---------------------------------------------------------------------------
-# phase 4: frozen ChemBERTa nearest-prototype floor (cell 18)
+# phase 4: frozen ChemBERTa nearest-prototype floor
 # ---------------------------------------------------------------------------
 def phase4(d, device):
     meta = pickle.load(open(d.meta, "rb"))
@@ -598,7 +594,7 @@ def phase4(d, device):
 
 
 # ---------------------------------------------------------------------------
-# retrieval-index fix for E1.4 / E2.4 (cells 22-23)
+# retrieval-index fix for E1.4 / E2.4
 # ---------------------------------------------------------------------------
 @torch.no_grad()
 def _evaluate_fixed(model, g, nids, C, tcounts, tag, d, device):
@@ -682,7 +678,7 @@ def fix_e2_4(d, device):
 
 
 # ---------------------------------------------------------------------------
-# phase 5: tables (cell 20), using the fixed E1.4 / E2.4 rows as in the thesis
+# phase 5: tables  using the fixed E1.4 / E2.4 rows as in the thesis
 # ---------------------------------------------------------------------------
 def phase5_tables(d):
     def jload(n):
