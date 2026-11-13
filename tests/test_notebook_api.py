@@ -1,5 +1,3 @@
-"""Every ddi function or name a notebook uses must exist in the package.
-Catches renames or deletions in src/ that would only break a notebook."""
 import ast
 import importlib
 import json
