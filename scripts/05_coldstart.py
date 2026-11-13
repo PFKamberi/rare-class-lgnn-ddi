@@ -1,5 +1,4 @@
-"""Step 5: cold start (Chapter 8). Drug-disjoint split, Setup A/B graphs, runs E1.1-E1.5
-and E2.1-E2.4, the ChemBERTa floor, the retrieval-index fix for E1.4/E2.4, Tables 8.1-8.7.
+"""Step 5: cold start (Chapter 8). 
 Every phase caches its output and skips work already on disk."""
 import os
 import shutil
