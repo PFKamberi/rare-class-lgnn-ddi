@@ -1,8 +1,6 @@
-# ddi-linegraph
+# Rare-Class Feature-Augmented Line-Graph Neural Networks for Drug-Drug Interaction Event Prediction under Class Imbalance
 
-Code for my MSc thesis *Rare-Class Feature-Augmented Line-Graph Neural Networks for Drug-Drug Interaction Event Prediction under Class Imbalance*.
-
-The task is to predict which type of event a drug–drug interaction causes, a strongly imbalanced problem with many rare types. Each interaction becomes a node of a line graph, represented by the frozen ChemBERTa-77M embeddings of its two drugs. Two GraphSAGE layers and an LDAM loss classify it, and nodes of rare event types are enriched with features retrieved from their most similar training interactions.
+This repository contains the code for my MSc thesis, whose main objective is to improve the prediction of rare drug–drug interaction event types under strong class imbalance. Each interaction becomes a node of a line graph, represented by the frozen ChemBERTa-77M embeddings of its two drugs. Two GraphSAGE layers and an LDAM loss classify it, and nodes of rare event types are enriched with features retrieved from their most similar training interactions.
 
 ## Contents
 
